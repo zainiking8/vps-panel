@@ -9,7 +9,7 @@ A powerful VPN management panel with Dropbear SSH, Nginx SSL WebSocket Proxy, Au
 Run this command as root:
 
 ```bash
-apt update && apt install -y curl && curl -o /usr/local/bin/menu https://github.com/zainiking8/vps-panel/main/main/menu.sh && chmod +x /usr/local/bin/menu && menu
+apt update && apt install -y curl && curl -o /usr/local/bin/menu https://raw.githubusercontent.com/zainiking8/vps-panel/main/menu.sh && chmod +x /usr/local/bin/menu && menu
 ```
 
 ---
