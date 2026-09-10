@@ -1,100 +1,67 @@
 #!/bin/bash
 #====================================================
 #  ZAINI X BRAND PREMIUM VPN SCRIPT
-#  Full Uninstaller
-#  Removes ALL components so the script can be re-run
-#  cleanly from scratch with: bash install.sh
+#  100% Deep Clean Uninstaller & Purge System
 #====================================================
+
+export DEBIAN_FRONTEND=noninteractive
 
 R='\033[1;31m'
 G='\033[1;32m'
 Y='\033[1;33m'
-W='\033[1;37m'
 N='\033[0m'
 
-echo -e "${Y}=====================================================${N}"
-echo -e "${R}    ZAINI X BRAND VPN — FULL UNINSTALL${N}"
-echo -e "${Y}=====================================================${N}"
-echo ""
+echo -e "${Y}Starting Full Deep Clean Purge...${N}"
 
-#------------- CONFIRM -------------
-read -p "This will REMOVE ALL VPN services and configs. Type 'yes' to continue: " CONFIRM
-if [[ "$CONFIRM" != "yes" ]]; then
-    echo -e "${Y}Cancelled.${N}"
-    exit 0
-fi
-
-echo -e "${W}[1/8] Stopping services...${N}"
-for SVC in nginx stunnel4 dropbear xray ssh; do
+# 1. Stop and Force Mask Services
+echo -e "${Y}[1/5] Disabling and stopping all services...${N}"
+for SVC in nginx dropbear stunnel4 xray wstunnel-ssh vnstat ufw; do
     systemctl stop "$SVC" 2>/dev/null
     systemctl disable "$SVC" 2>/dev/null
+    systemctl mask "$SVC" 2>/dev/null
 done
 
-echo -e "${W}[2/8] Removing VPN packages...${N}"
-apt remove --purge -y stunnel4 dropbear xray nginx certbot python3-certbot-nginx 2>/dev/null
-apt autoremove -y 2>/dev/null
+# 2. Reset Firewall Completely
+echo -e "${Y}[2/5] Resetting firewall and network tables...${N}"
+if command -v ufw &>/dev/null; then
+    ufw --force reset 2>/dev/null
+    ufw disable 2>/dev/null
+fi
+iptables -F 2>/dev/null
+iptables -X 2>/dev/null
+iptables -t nat -F 2>/dev/null
+iptables -t nat -X 2>/dev/null
 
-echo -e "${W}[3/8] Removing Xray binary...${N}"
-systemctl stop xray 2>/dev/null
-rm -rf /usr/local/bin/xray /usr/local/etc/xray /var/log/xray /etc/systemd/system/xray* 2>/dev/null
-systemctl daemon-reload 2>/dev/null
-
-echo -e "${W}[4/8] Removing SSL certificates...${N}"
-rm -rf /etc/nginx/ssl
-rm -rf /etc/letsencrypt/live/* /etc/letsencrypt/archive/* /etc/letsencrypt/renewal/*
-
-echo -e "${W}[5/8] Removing config files...${N}"
-rm -f /etc/nginx/conf.d/zainix.conf
-rm -f /etc/stunnel/stunnel.conf
-rm -f /etc/default/dropbear.bak
-rm -f /etc/ssh/sshd_config.bak
-
-echo -e "${W}[6/8] Restoring default SSH config...${N}"
-cat > /etc/ssh/sshd_config <<'EOF'
-Port 22
-PermitRootLogin prohibit-password
-PasswordAuthentication yes
-PubkeyAuthentication yes
-EOF
-systemctl restart ssh 2>/dev/null
-
-echo -e "${W}[7/8] Removing ZAINIX brand files and users...${N}"
-rm -rf /etc/zainix-brand
-rm -f /etc/issue.net /etc/motd /etc/banner /etc/dropbear/banner
-
-# Remove all users created by this script (keep system users)
-echo -e "${W}    Removing created users...${N}"
-if [[ -d /home ]]; then
-    for USERDIR in /home/*; do
-        U=$(basename "$USERDIR")
-        # Skip system users (UID < 1000) and current root/sudo users
-        UID_NUM=$(id -u "$U" 2>/dev/null)
-        if [[ -n "$UID_NUM" && "$UID_NUM" -ge 1000 ]]; then
-            # Only remove if /etc/passwd shows shell is /bin/bash (created by script)
-            SHELL_=$(getent passwd "$U" | cut -d: -f7)
-            if [[ "$SHELL_" == "/bin/bash" ]]; then
-                userdel -r "$U" 2>/dev/null
-                echo -e "    ${R}removed user: $U${N}"
-            fi
-        fi
-    done
+# 3. Restore Default SSH Configuration
+echo -e "${Y}[3/5] Restoring original clean SSH configuration...${N}"
+if [ -f /etc/ssh/sshd_config ]; then
+    sed -i 's|Banner /etc/banner||g' /etc/ssh/sshd_config
+    sed -i 's|PrintMotd yes|PrintMotd no|g' /etc/ssh/sshd_config
+    systemctl unmask ssh 2>/dev/null
+    systemctl restart ssh 2>/dev/null
 fi
 
-echo -e "${W}[8/8] Removing menu commands and firewall rules...${N}"
-rm -f /usr/local/bin/menu /usr/local/bin/zainix-uninstall
-ufw --force reset 2>/dev/null
-iptables -F 2>/dev/null
-netfilter-persistent save 2>/dev/null
+# 4. Remove All Installed Files, Configurations & Binaries
+echo -e "${Y}[4/5] Removing folders and systemd definitions...${N}"
+rm -rf /etc/zainix-brand
+rm -rf /etc/nginx/ssl
+rm -f /etc/nginx/conf.d/zainix.conf
+rm -rf /usr/local/etc/xray
+rm -f /etc/stunnel/stunnel.conf
+rm -f /etc/systemd/system/wstunnel-ssh.service
+rm -f /usr/local/bin/wstunnel
+rm -f /usr/local/bin/menu
+rm -f /usr/local/bin/zainix-uninstall
 
-echo ""
+# 5. Clean Environment Banners
+echo -e "${Y}[5/5] Resetting MOTD and login banners...${N}"
+rm -f /etc/issue.net /etc/motd /etc/banner /etc/dropbear/banner
+touch /etc/motd /etc/issue.net
+systemctl daemon-reload
+
 echo -e "${G}=====================================================${N}"
-echo -e "${G}    UNINSTALL COMPLETE${N}"
+echo -e "${G}    PURGE COMPLETE! VPS IS NOW COMPLETELY FRESH!${N}"
 echo -e "${G}=====================================================${N}"
-echo ""
-echo -e "${W}All VPN components, configs, users and certificates${N}"
-echo -e "${W}have been removed. Your VPS is now clean.${N}"
-echo ""
-echo -e "${W}To re-install from scratch, just run:${N}"
-echo -e "${G}    bash install.sh${N}"
-echo ""
-exit 0
+echo -e "${Y}Rebooting VPS in 3 seconds to clear locked ports...${N}"
+sleep 3
+reboot
